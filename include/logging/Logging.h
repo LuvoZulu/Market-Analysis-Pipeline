@@ -6,16 +6,9 @@
 #include <string_view>
 
 #include <spdlog/spdlog.h>
-#include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 
 namespace map::logging {
-
-    inline constexpr int normal_file_size = 1024 * 1024;
-    inline constexpr int large_file_size = normal_file_size * 3;
-    inline constexpr int max_files_daily = 8;
-    inline constexpr int daily_file_size = normal_file_size * max_files_daily;
-    inline constexpr const char* log_name = "logs/logs.txt";
 
     class Logger {
     public:
@@ -28,10 +21,17 @@ namespace map::logging {
         Logger(Logger&&) = delete;
 
         void init(std::string name) {
-            // TODO: create sinks + logger
-            // auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-            // ...
+            auto file_sink = std::make_shared < spdlog::sinks::rotating_file_sink_mt(name.c_str(), daily_file_size, max_files_daily, false);
+            logger_ = std::make_shared<spdlog::logger>(name.c_str(), file_sink);
+
+            logger_->set_pattern("%Y-%m-%d %H:%M:%S.%e  %v");
+            logger_->set_level(spdlog::level::info);
+
+            spdlog::register_logger(logger);
+            spdlog::set_default_logger(logger_);
         }
+
+        void set_level(const spdlog::level lvl) { logger_->set_level(lvl); }
 
         Logger& operator=(const Logger&) = delete;
         Logger& operator=(Logger&&) = delete;
@@ -41,6 +41,12 @@ namespace map::logging {
 
         Logger() = default;
         ~Logger() = default;
+
+        inline constexpr int normal_file_size = 1024 * 1024;
+        inline constexpr int large_file_size = normal_file_size * 3;
+        inline constexpr int max_files_daily = 8;
+        inline constexpr int daily_file_size = normal_file_size * max_files_daily;
+        inline constexpr const char* log_name = "logs/logs.txt";
     };
 
 } // namespace map::logging
