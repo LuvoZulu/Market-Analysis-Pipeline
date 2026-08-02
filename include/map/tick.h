@@ -36,6 +36,31 @@ namespace map::market_data{
             , m_spread{ spread }
         {}
     };
+
+    // <DATE>	<TIME>	<BID>	<ASK>	<LAST>	<VOLUME>	<FLAGS>
+    // TODO: This class I am planning on using to validate my tick class above. This is the actual tick class, that gets
+    //       market events each time they change. The above is the tick every minute,5 minutes, etc
+    struct Tick_v {
+        std::chrono::milliseconds   m_time;
+        std::chrono::year_month_day m_date;
+        double m_bid;
+        double m_ask;
+        double m_last;
+        double m_volume;
+        size_t flags;
+
+        Tick_v(std::chrono::milliseconds time, std::chrono::year_month_day date,double bid, double ask, double last,
+                double volume, size_t flags
+        ) :
+            m_time{time}, m_date{date}, m_bid{bid}, m_ask{ask}, m_last{last}, m_volume{volume} , m_flags{flags}
+        {}
+    };
+
+    class TickBuilder {
+    public:
+        TickBuilder(){}
+        ~TickBuilder(){}
+    };
 }
 
 
