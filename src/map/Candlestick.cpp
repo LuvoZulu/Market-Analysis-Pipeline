@@ -4,6 +4,8 @@
 #include <chrono> // std::chrono
 #include <fstream> // std::ifstream
 #include <filesystem> // std::filesystem::path
+#include <ranges> // std::ranges::split
+#include <string_view> // std::string_view
 
 namespace map::market_data {
     CandleStickBuilder::CandleStickBuilder()
@@ -72,7 +74,29 @@ namespace map::market_data {
             std::string tick_event;
 
             while (std::getline(ticks_file,tick_event)) {
-                LOG_INFO(tick_event);
+
+                auto split_str = tick_event | std::views::split(' ') | std::views::transform([](auto&& rngs)) {
+                    return std::string(rngs.begin(), rngs.end());
+                }) | std::views::filter([](std::string_view sv) {
+                    return !sv.empty();
+                    });
+
+                auto idx = 0uz;
+
+                for (std::string_view sv : split_str) {
+                    switch (idx) {
+                    case 0:
+                        break;
+                    case 1:
+                        break;
+                    case 2:
+                        break;
+                    case 3:
+                        break;
+                    }
+                }
+                Tick tick;
+
             }
         }
 		return Tick();
