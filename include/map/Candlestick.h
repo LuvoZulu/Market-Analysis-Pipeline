@@ -6,6 +6,7 @@
 #include <filesystem> // std::filesystem::path
 #include <queue> //std::queue
 #include <vector> // std::vector
+#include <optional> //std::optional
 
 #include "logging/Logging.h" // map::logging::Logger
 
@@ -74,7 +75,7 @@ namespace map::market_data {
     class CandleStickBuilder {
     public:
         CandleStickBuilder(){}
-        Candlestick get_candlestick(Timeframe timeframe, std::vector<Timeframe> tfs = {});
+        std::optional<Candlestick> get_candlestick(Timeframe timeframe = Timeframe::TICK, std::vector<Timeframe> tfs = {});
         ~CandleStickBuilder(){}
     private:
         Tick build_tick(std::string& path); // temporary - bad design
@@ -84,6 +85,7 @@ namespace map::market_data {
         std::vector<Tick> processed_ticks;
 
         std::vector<Candlestick> minute_candlesticks;
+        std::vector<Candlestick> minute_5_candlesticks;
         std::vector<Candlestick> minute_15_candlesticks;
         std::vector<Candlestick> minute_30_candlesticks;
         std::vector<Candlestick> hour_candlesticks;
