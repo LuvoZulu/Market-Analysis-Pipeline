@@ -1,17 +1,17 @@
-#include "logging/Logging.h"
+#include <map/Candlestick.h>
 
 int main() {
     
     map::logging::Logger::get_instance().init("Market_Analysis_Pipeline");
     
     LOG_INFO("Application started");
-    LOG_DEBUG("Debug value = {}", 42);
-    LOG_WARN("Something looks off");
-    LOG_ERROR("Failed with code {}", 123);
+    
+    map::market_data::CandleStickBuilder buidler;
+    std::string c = "C:\\Users\\Kaos\\Documents\\2026\\Programming\\Quant\\Market-Analysis-Pipeline\\data\\gold.csv";
 
-    LOG_MD("Tick received: price={}", 150.25);
-    LOG_OMS("Order sent: id={}", 98765);
-    LOG_RISK("Risk limit approaching");
+    buidler.build_tick(c);
+
+    LOG_INFO("Application stopping");
 
     return 0;
 }

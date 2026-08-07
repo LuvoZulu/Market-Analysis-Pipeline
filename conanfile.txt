@@ -3,7 +3,7 @@ nlohmann_json/3.12.0
 spdlog/1.17.0
 
 [generators]
-CMakeDeps
+CMakeConfigDeps
 CMakeToolchain
 
 [layout]

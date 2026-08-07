@@ -1,9 +1,6 @@
 #ifndef CANDLESTICK_H
 #define CANDLESTICK_H
 
-#include <chrono> // std::chrono
-#include <fstream> // std::ifstream
-#include <filesystem> // std::filesystem::path
 #include <queue> //std::queue
 #include <vector> // std::vector
 #include <optional> //std::optional
@@ -62,7 +59,15 @@ namespace map::market_data {
         double m_ask;
         double m_last;
         double m_volume;
-        size_t flags;
+        size_t m_flags;
+
+        Tick() {
+            m_bid = 0;
+            m_ask = 0;
+            m_last = 0;
+            m_volume = 0;
+            m_flags = 0;
+        }
 
         Tick(std::chrono::milliseconds time, std::chrono::year_month_day date,double bid, double ask, double last,
                 double volume, size_t flags
@@ -74,11 +79,11 @@ namespace map::market_data {
     
     class CandleStickBuilder {
     public:
-        CandleStickBuilder(){}
+        CandleStickBuilder();
         std::optional<Candlestick> get_candlestick(Timeframe timeframe = Timeframe::TICK, std::vector<Timeframe> tfs = {});
-        ~CandleStickBuilder(){}
-    private:
+        ~CandleStickBuilder();
         Tick build_tick(std::string& path); // temporary - bad design
+    private:
         void make_candlesticks(std::string& path);
 
         std::queue<Tick> ticks_;
