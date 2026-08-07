@@ -10,7 +10,7 @@
 namespace map::market_data{
 
 	//<DATE>	<TIME>	<OPEN>	<HIGH>	<LOW>	<CLOSE>	<TICKVOL>	<VOL>	<SPREAD>
-    struct Tick {
+    struct Candlestick {
         std::chrono::milliseconds   m_time;
         std::chrono::year_month_day m_date;
         double m_open;
@@ -21,7 +21,7 @@ namespace map::market_data{
         double m_volume;
         double m_spread;
 
-        Tick(std::chrono::milliseconds time,
+        Candlestick(std::chrono::milliseconds time,
             std::chrono::year_month_day date,
             double open, double high, double low, double close,
             double tick_volume, double volume, double spread)
@@ -56,10 +56,11 @@ namespace map::market_data{
         {}
     };
 
-    class TickBuilder {
+    
+    class CandleStickBuilder {
     public:
-        TickBuilder(){}
-        ~TickBuilder(){}
+        CandleStickBuilder(){}
+        ~CandleStickBuilder(){}
     };
 }
 
