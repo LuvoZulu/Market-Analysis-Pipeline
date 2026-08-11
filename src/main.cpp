@@ -1,17 +1,28 @@
 #include <map/Candlestick.h>
+#include <iostream>
 
 int main() {
-    
     map::logging::Logger::get_instance().init("Market_Analysis_Pipeline");
-    
-    LOG_INFO("Application started");
-    
-    map::market_data::CandleStickBuilder buidler;
-    std::string c = "C:\\Users\\Kaos\\Documents\\2026\\Programming\\Quant\\Market-Analysis-Pipeline\\data\\gold.csv";
 
-    buidler.build_tick(c);
+    LOG_INFO("Application started");
+
+    try {
+        map::market_data::CandleStickBuilder builder;
+        std::string c = "C:\\Users\\Kaos\\Documents\\2026\\Programming\\Quant\\Market-Analysis-Pipeline\\data\\gold.csv";
+
+        builder.build_tick(c);
+
+        LOG_INFO("build_tick finished successfully");
+    }
+    catch (const std::exception& e) {
+        LOG_ERROR("Exception: {}", e.what());
+        std::cerr << "Exception: " << e.what() << std::endl;
+    }
+    catch (...) {
+        LOG_ERROR("Unknown exception occurred");
+        std::cerr << "Unknown exception occurred" << std::endl;
+    }
 
     LOG_INFO("Application stopping");
-
     return 0;
 }

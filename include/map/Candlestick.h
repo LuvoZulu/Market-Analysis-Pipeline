@@ -4,6 +4,9 @@
 #include <queue> //std::queue
 #include <vector> // std::vector
 #include <optional> //std::optional
+#include <chrono> //std::chrono::milliseconds
+#include <stdexcept> // noexcept
+#include <format> // std::format
 
 #include "logging/Logging.h" // map::logging::Logger
 
@@ -55,7 +58,7 @@ namespace map::market_data {
     struct Tick {
         std::chrono::milliseconds   m_time;
         std::chrono::year_month_day m_date;
-        double m_bid;
+        double m_bid; // times 100
         double m_ask;
         double m_last;
         double m_volume;
@@ -80,11 +83,33 @@ namespace map::market_data {
     class CandleStickBuilder {
     public:
         CandleStickBuilder();
-        std::optional<Candlestick> get_candlestick(Timeframe timeframe = Timeframe::TICK, std::vector<Timeframe> tfs = {});
+        [[nodisgard]] std::optional<Candlestick> get_candlestick(Timeframe timeframe = Timeframe::TICK, std::vector<Timeframe> tfs = {});
         ~CandleStickBuilder();
         Tick build_tick(std::string& path); // temporary - bad design
     private:
-        void make_candlesticks(std::string& path);
+        [[noreturn]]  void make_candlesticks(std::string& path);
+        inline std::chrono::milliseconds make_time(int h, int m, int s, int ms) noexcept {
+            return std::chrono::milliseconds{ (static_cast<long long>((h) * 3600 + m * 60 + s) * 1000 + ms) };
+        }
+
+        inline std::chrono::year_month_day make_date(int y, int m, int d) noexcept {
+            using namespace std::chrono;
+            return year{ y } / month{ static_cast<unsigned>(m) } / day{ static_cast<unsigned>(d) };
+        }
+
+        std::string to_human_time(std::chrono::milliseconds ms) {
+
+            auto secs = duration_cast<std::chrono::seconds>(ms);
+            std::chrono::hh_mm_ss time{ secs };
+
+            auto millis = ms - duration_cast<std::chrono::milliseconds>(secs);
+
+            return std::format("{:02}:{:02}:{:02}.{:03}",
+                time.hours().count(),
+                time.minutes().count(),
+                time.seconds().count(),
+                millis.count());
+        }
 
         std::queue<Tick> ticks_;
         std::vector<Tick> processed_ticks;
