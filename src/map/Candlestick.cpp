@@ -62,11 +62,6 @@ namespace map::market_data {
         }
     }
 
-    CandleStickBuilder::~CandleStickBuilder()
-    {
-        // join and stop all threads
-    }
-
     Tick CandleStickBuilder::build_tick(std::string& path)
     {
         std::filesystem::path file_path = path;
@@ -156,6 +151,16 @@ namespace map::market_data {
 
 	void CandleStickBuilder::make_candlesticks(std::string& path)
 	{
+        auto now = std::chrono::system_clock::now();
+        auto next = floor<std::chrono::minutes>(now) + std::chrono::minutes{ 1 };
 
+        std::this_thread::sleep_until(next);
+        auto Ticks = build_tick(path);
+        ticks_.push(Ticks);
 	}
+
+    CandleStickBuilder::~CandleStickBuilder()
+    {
+        // join and stop all threads
+    }
 }
