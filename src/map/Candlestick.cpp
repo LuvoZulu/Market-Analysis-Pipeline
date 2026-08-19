@@ -14,6 +14,8 @@ namespace map::market_data {
     CandleStickBuilder::CandleStickBuilder()
     {
         // Initialize multithreading for candlestick processer
+        thr1 = std::thread(make_candlesticks,this);
+        running = true;
     }
     std::optional<Candlestick> CandleStickBuilder::get_candlestick(Timeframe timeframe,std::vector<Timeframe> tfs)
     {
@@ -62,7 +64,7 @@ namespace map::market_data {
         }
     }
 
-    Tick CandleStickBuilder::build_tick(std::string& path)
+    Tick CandleStickBuilder::build_tick(std::string& path = "data\\gold.csv")
     {
         std::filesystem::path file_path = path;
         std::ifstream ticks_file(file_path);
@@ -149,14 +151,20 @@ namespace map::market_data {
         return tick;
     }
 
-	void CandleStickBuilder::make_candlesticks(std::string& path)
+	void CandleStickBuilder::make_candlesticks(std::string& path = "data\\gold.csv")
 	{
-        auto now = std::chrono::system_clock::now();
-        auto next = floor<std::chrono::minutes>(now) + std::chrono::minutes{ 1 };
+        while (running) {
+            
+            {
+                std::lock_guard<std::mutex> lock_time(access_control);
+                auto now = std::chrono::system_clock::now();
+                auto next = floor<std::chrono::minutes>(now) + std::chrono::minutes{ 1 };
+                std::this_thread::sleep_until(next);
+            }
 
-        std::this_thread::sleep_until(next);
-        auto Ticks = build_tick(path);
-        ticks_.push(Ticks);
+            auto Ticks = build_tick(path);
+            ticks_.push(Ticks);
+        }
 	}
 
     CandleStickBuilder::~CandleStickBuilder()

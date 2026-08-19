@@ -7,6 +7,9 @@
 #include <chrono> //std::chrono::milliseconds
 #include <stdexcept> // noexcept
 #include <format> // std::format
+#include <thread> //std::thread
+#include <mutex> //std::mutex
+#include <atomic> //std::atomic
 
 #include "logging/Logging.h" // map::logging::Logger
 
@@ -87,6 +90,20 @@ namespace map::market_data {
         ~CandleStickBuilder();
         Tick build_tick(std::string& path); // temporary - bad design
     private:
+        std::thread thr1;
+        std::mutex access_control;
+        std::atomic<bool> running;
+        
+        std::queue<Tick> ticks_;
+        std::vector<Tick> processed_ticks;
+
+        std::vector<Candlestick> minute_candlesticks;
+        std::vector<Candlestick> minute_5_candlesticks;
+        std::vector<Candlestick> minute_15_candlesticks;
+        std::vector<Candlestick> minute_30_candlesticks;
+        std::vector<Candlestick> hour_candlesticks;
+        std::vector<Candlestick> hour_4_candlesticks;
+
         [[noreturn]]  void make_candlesticks(std::string& path);
         inline std::chrono::milliseconds make_time(int h, int m, int s, int ms) noexcept {
             return std::chrono::milliseconds{ (static_cast<long long>((h) * 3600 + m * 60 + s) * 1000 + ms) };
@@ -97,7 +114,7 @@ namespace map::market_data {
             return year{ y } / month{ static_cast<unsigned>(m) } / day{ static_cast<unsigned>(d) };
         }
 
-        std::string to_human_time(std::chrono::milliseconds ms) {
+        std::string to_human_time(std::chrono::milliseconds ms) noexcept {
 
             auto secs = duration_cast<std::chrono::seconds>(ms);
             std::chrono::hh_mm_ss time{ secs };
@@ -111,15 +128,6 @@ namespace map::market_data {
                 millis.count());
         }
 
-        std::queue<Tick> ticks_;
-        std::vector<Tick> processed_ticks;
-
-        std::vector<Candlestick> minute_candlesticks;
-        std::vector<Candlestick> minute_5_candlesticks;
-        std::vector<Candlestick> minute_15_candlesticks;
-        std::vector<Candlestick> minute_30_candlesticks;
-        std::vector<Candlestick> hour_candlesticks;
-        std::vector<Candlestick> hour_4_candlesticks;
     };
 }
 
