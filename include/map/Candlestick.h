@@ -34,6 +34,7 @@ namespace map::market_data {
         double m_open;
         double m_high;
         double m_low;
+        double m_price;
         double m_close;
         double m_tick_volume;
         double m_volume;
@@ -90,7 +91,7 @@ namespace map::market_data {
         ~CandleStickBuilder();
         Tick build_tick(std::string& path); // temporary - bad design
     private:
-        std::thread thr1;
+        std::jthread thr1;
         std::mutex access_control;
         std::atomic<bool> running;
         
@@ -105,6 +106,12 @@ namespace map::market_data {
         std::vector<Candlestick> hour_4_candlesticks;
 
         [[noreturn]]  void make_candlesticks(std::string& path);
+        void build_candlestick(Timeframe& tf);
+        void build_candlestick(Timeframe&& tf);
+
+        void build_m1();
+        void build_from_lower(const std::vector<Candlestick>& lower, std::vector<Candlestick>& higher, size_t count);
+
         inline std::chrono::milliseconds make_time(int h, int m, int s, int ms) noexcept {
             return std::chrono::milliseconds{ (static_cast<long long>((h) * 3600 + m * 60 + s) * 1000 + ms) };
         }

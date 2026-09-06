@@ -8,7 +8,7 @@ int main() {
 
     try {
         map::market_data::CandleStickBuilder builder;
-        std::string c = "C:\\Users\\Kaos\\Documents\\2026\\Programming\\Quant\\Market-Analysis-Pipeline\\data\\gold.csv";
+        std::string c = "data\\gold.csv";
 
         builder.build_tick(c);
 
