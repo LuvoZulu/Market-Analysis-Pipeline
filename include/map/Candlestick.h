@@ -105,7 +105,7 @@ namespace map::market_data {
         std::vector<Candlestick> hour_candlesticks;
         std::vector<Candlestick> hour_4_candlesticks;
 
-        [[noreturn]]  void make_candlesticks(std::string& path);
+        [[noreturn]]  void make_candlesticks(std::string path);
         void build_candlestick(Timeframe& tf);
         void build_candlestick(Timeframe&& tf);
 

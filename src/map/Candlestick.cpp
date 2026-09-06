@@ -14,12 +14,13 @@
 namespace map::market_data {
     CandleStickBuilder::CandleStickBuilder()
     {
-        // Initialize multithreading for candlestick processer
-        std::string path = "..\\data\\gold.csv";
-        thr1 = std::jthread(make_candlesticks,std::move(path),this);
+        std::string path = "..\\..\\data\\gold.csv";
         running = true;
-    }
 
+        thr1 = std::jthread([this, path = std::move(path)] {
+            make_candlesticks(path);
+            });
+    }
     std::optional<Candlestick> CandleStickBuilder::get_candlestick(Timeframe timeframe,std::vector<Timeframe> tfs)
     {
         if (tfs.empty() && timeframe == Timeframe::TICK) {
@@ -154,7 +155,7 @@ namespace map::market_data {
         return tick;
     }
 
-    void CandleStickBuilder::make_candlesticks(std::string& path) 
+    void CandleStickBuilder::make_candlesticks(std::string path) 
     {
         using namespace std::chrono;
 
