@@ -16,6 +16,8 @@ find_package(spdlog REQUIRED)
 add_executable(Market_Analysis_Pipeline
     src/main.cpp
     src/map/Candlestick.cpp
+    src/technical/indicators/average_true_range.cpp
+    src/technical/indicators/volume_weighted_average_price.cpp
 )
 
 target_include_directories(Market_Analysis_Pipeline
