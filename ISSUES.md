@@ -24,3 +24,13 @@ In [Candlestick.h](include/map/Candlestick.h), the build_tick method takes in a 
 ```
 In the candlestick class I am using hardcoded values and this is meaningless and not a good practice.
 ```
+
+4. Time sync with chrono
+```
+There is a possibility that I face issues with my current usage of chrono. I am using the execution computer as the saw of truth in terms of time when using system_clock::now(). I'll see if this is correct or not as i continue.
+```
+
+5. ATR Time disputes
+```
+In calculating the average true range, in time horizons how do I calculate time accurately when its not provided? Document this thoroughly
+```
