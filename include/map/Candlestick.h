@@ -40,14 +40,20 @@ namespace map::market_data {
         double m_volume;
         double m_spread;
 
+        Candlestick() : m_time({}), m_date({}), m_open(0.0) , m_high(0.0),
+                        m_low(0.0), m_price(0.0), m_close(0.0), m_tick_volume(0.0),
+                        m_volume(0.0), m_spread(0.0)
+        {}
+
         Candlestick(std::chrono::milliseconds time,
             std::chrono::year_month_day date,
-            double open, double high, double low, double close,
+            double open, double high, double low,double price ,double close,
             double tick_volume, double volume, double spread)
             : m_time{ time }
             , m_date{ date }
             , m_open{ open }
             , m_high{ high }
+            , m_price{ price }
             , m_low{ low }
             , m_close{ close }
             , m_tick_volume{ tick_volume }
