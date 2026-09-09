@@ -20,7 +20,9 @@ namespace map::market_data {
         thr1 = std::jthread([this, path = std::move(path)] {
             make_candlesticks(path);
             });
+
     }
+
     std::optional<Candlestick> CandleStickBuilder::get_candlestick(Timeframe timeframe,std::vector<Timeframe> tfs)
     {
         if (tfs.empty() && timeframe == Timeframe::TICK) {
@@ -93,7 +95,7 @@ namespace map::market_data {
             std::vector<std::string> fields(split_str.begin(), split_str.end());
 
             if (fields.size() < 5) {
-                LOG_WARN("Skipping malformed line: {}", tick_event);
+                LOG_WARN("Skipping malformed line: {}", tick_event); // Log these to a file for further investigation
                 continue;
             }
 
@@ -189,6 +191,10 @@ namespace map::market_data {
             if (minute_counter % 240 == 0) build_candlestick(Timeframe::H4);
 
             next_minute += minutes{ 1 };
+        }
+        if (ticks_.empty()) {
+            thr1.request_stop();
+            running.store(false, std::memory_order_relaxed);
         }
     }
 

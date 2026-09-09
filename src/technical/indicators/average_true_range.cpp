@@ -9,6 +9,11 @@ namespace map::indicators
 	{
 		std::atomic<size_t> candlestick_num{ 0 };
 
+		if (data.empty())
+		{
+			return 0.0;
+		}
+
 		auto curr_stick = data.cbegin();
 
 		candlestick_num.fetch_add(1, std::memory_order_relaxed); // hard-coding incremenet (to be improved)
