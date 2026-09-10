@@ -20,6 +20,10 @@ namespace map::market_data {
         threads_.emplace_back([this, path = std::move(path)] {make_candlesticks(path); });
     }
 
+    std::vector<map::market_data::Candlestick>& CandleStickBuilder::get_candlesticks() {
+        return minute_30_candlesticks;
+    }
+
     std::optional<Candlestick> CandleStickBuilder::get_candlestick(Timeframe timeframe,std::vector<Timeframe> tfs)
     {
         if (tfs.empty() && timeframe == Timeframe::TICK) {
@@ -69,6 +73,14 @@ namespace map::market_data {
 
     Tick CandleStickBuilder::build_tick(std::string& path)
     {
+
+        if (!running) {
+            for (auto& thr : threads_) {
+                thr.request_stop();
+            }
+        }
+
+
         std::filesystem::path file_path = path;
         std::ifstream ticks_file(file_path);
         Tick tick{};
@@ -148,7 +160,7 @@ namespace map::market_data {
             tick.m_bid = bid;
             tick.m_flags = flags;
 
-            LOG_INFO("Tick: date={} time={} ask={}", tick.m_date, tick.m_time.count(), tick.m_ask);
+            LOG_INFO("Tick: date={} time={} ask={}", tick.m_date, to_human_time(tick.m_time), tick.m_ask);
         }
 
         return tick;
@@ -156,6 +168,12 @@ namespace map::market_data {
 
     void CandleStickBuilder::make_candlesticks(std::string path) 
     {
+        if (!running) {
+            for (auto& thr : threads_) {
+                thr.request_stop();
+            }
+        }
+
         using namespace std::chrono;
 
         auto next_minute = floor<minutes>(system_clock::now()) + minutes{ 1 };
@@ -174,8 +192,13 @@ namespace map::market_data {
                 std::this_thread::sleep_for(milliseconds{ 5 });
             }
 
-            if (!running.load(std::memory_order_relaxed))
+            if (!running.load(std::memory_order_relaxed)) {
+                for (auto& thr : threads_) {
+                    thr.request_stop();
+                }
                 break;
+            }
+                
 
             ++minute_counter;
 
@@ -293,7 +316,7 @@ namespace map::market_data {
         double close_price = (last_tick.m_bid + last_tick.m_ask) * 0.5;
         double spread = last_tick.m_ask - last_tick.m_bid;
 
-        minute_candlesticks.emplace_back(open_tick.m_time,open_tick.m_date,open_price,high,low,close_price,volume,volume,spread);
+        minute_candlesticks.emplace_back(map::market_data::Candlestick(open_tick.m_time,open_tick.m_date,open_price,high,low,close_price,close_price,volume,volume,spread));
     }
 
     void CandleStickBuilder::build_from_lower(const std::vector<Candlestick>& lower,std::vector<Candlestick>& higher,size_t count)
@@ -317,14 +340,15 @@ namespace map::market_data {
 
         double spread = close_stick.m_spread;
 
-        higher.emplace_back(open_stick.m_time,open_stick.m_date,open_stick.m_price,high,low,close_stick.m_close,volume,volume,spread);
+        higher.emplace_back(open_stick.m_time,open_stick.m_date,open_stick.m_price,high,low,close_stick.m_close, close_stick.m_close,volume,volume,spread);
     }
 
-    CandleStickBuilder::~CandleStickBuilder()
-    {
-        // join and stop all threads
-        for (auto& thr : threads_) {
-            thr.request_stop();
-        }
+    CandleStickBuilder::~CandleStickBuilder() {
+        running.store(false, std::memory_order_relaxed);
+
+        for (auto& t : threads_) t.request_stop();
+
+        threads_.clear();
     }
+    
 }

@@ -93,7 +93,7 @@ namespace map::market_data {
     class CandleStickBuilder {
     public:
         CandleStickBuilder();
-        [[nodisgard]] std::optional<Candlestick> get_candlestick(Timeframe timeframe = Timeframe::TICK, std::vector<Timeframe> tfs = {});
+        [[nodisgard]] std::vector<map::market_data::Candlestick>& get_candlesticks();
         ~CandleStickBuilder();
         Tick build_tick(std::string& path); // temporary - bad design
     private:
@@ -113,6 +113,7 @@ namespace map::market_data {
         std::vector<Candlestick> hour_4_candlesticks;
 
         [[noreturn]]  void make_candlesticks(std::string path);
+        [[nodisgard]] std::optional<Candlestick> get_candlestick(Timeframe timeframe = Timeframe::TICK, std::vector<Timeframe> tfs = {});
         void build_candlestick(Timeframe& tf);
         void build_candlestick(Timeframe&& tf);
 
