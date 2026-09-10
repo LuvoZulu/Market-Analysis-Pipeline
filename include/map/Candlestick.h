@@ -97,7 +97,8 @@ namespace map::market_data {
         ~CandleStickBuilder();
         Tick build_tick(std::string& path); // temporary - bad design
     private:
-        std::jthread thr1;
+        std::vector<std::jthread> threads_;
+
         std::mutex access_control;
         std::atomic<bool> running;
         

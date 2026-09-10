@@ -17,10 +17,7 @@ namespace map::market_data {
         std::string path = "..\\..\\data\\gold.csv";
         running = true;
 
-        thr1 = std::jthread([this, path = std::move(path)] {
-            make_candlesticks(path);
-            });
-
+        threads_.emplace_back([this, path = std::move(path)] {make_candlesticks(path); });
     }
 
     std::optional<Candlestick> CandleStickBuilder::get_candlestick(Timeframe timeframe,std::vector<Timeframe> tfs)
@@ -192,8 +189,19 @@ namespace map::market_data {
 
             next_minute += minutes{ 1 };
         }
+
+        if (!running) {
+            for (auto& thr : threads_) {
+                LOG_INFO("STOPPING ALL THREADS\n");
+                thr.request_stop();
+            }
+        }
+
         if (ticks_.empty()) {
-            thr1.request_stop();
+            LOG_INFO("STOPPING CANDLESTICK THREAD\n");
+            for (auto& thr : threads_) {
+                thr.request_stop();
+            }
             running.store(false, std::memory_order_relaxed);
         }
     }
@@ -315,6 +323,8 @@ namespace map::market_data {
     CandleStickBuilder::~CandleStickBuilder()
     {
         // join and stop all threads
-        thr1.request_stop();
+        for (auto& thr : threads_) {
+            thr.request_stop();
+        }
     }
 }
