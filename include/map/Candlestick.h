@@ -1,24 +1,17 @@
 #ifndef CANDLESTICK_H
 #define CANDLESTICK_H
 
-#include <queue> //std::queue
-#include <vector> // std::vector
-#include <optional> //std::optional
-#include <chrono> //std::chrono::milliseconds
-#include <stdexcept> // noexcept
-#include <format> // std::format
-#include <thread> //std::thread
-#include <mutex> //std::mutex
-#include <atomic> //std::atomic
-
-#include "logging/Logging.h" // map::logging::Logger
-
-
+#include <chrono>
+#include <filesystem>
+#include <format>
+#include <optional>
+#include <string>
+#include <vector>
 
 namespace map::market_data {
 
     enum class Timeframe {
-        TICK = 0, // only here for design and also live market updates, which exclude verbose info
+        TICK = 0,
         M1 = 1,
         M5 = 2,
         M15 = 3,
@@ -27,34 +20,44 @@ namespace map::market_data {
         H4 = 6,
     };
 
-	//<DATE>	<TIME>	<OPEN>	<HIGH>	<LOW>	<CLOSE>	<TICKVOL>	<VOL>	<SPREAD>
-    struct Candlestick {
-        std::chrono::milliseconds   m_time;
-        std::chrono::year_month_day m_date;
-        double m_open;
-        double m_high;
-        double m_low;
-        double m_price;
-        double m_close;
-        double m_tick_volume;
-        double m_volume;
-        double m_spread;
+    [[nodiscard]] constexpr std::chrono::minutes timeframe_duration(Timeframe tf) noexcept {
+        switch (tf) {
+        case Timeframe::M1:  return std::chrono::minutes{ 1 };
+        case Timeframe::M5:  return std::chrono::minutes{ 5 };
+        case Timeframe::M15: return std::chrono::minutes{ 15 };
+        case Timeframe::M30: return std::chrono::minutes{ 30 };
+        case Timeframe::H1:  return std::chrono::minutes{ 60 };
+        case Timeframe::H4:  return std::chrono::minutes{ 240 };
+        case Timeframe::TICK:
+        default:             return std::chrono::minutes{ 0 };
+        }
+    }
 
-        Candlestick() : m_time({}), m_date({}), m_open(0.0) , m_high(0.0),
-                        m_low(0.0), m_price(0.0), m_close(0.0), m_tick_volume(0.0),
-                        m_volume(0.0), m_spread(0.0)
-        {}
+    // <DATE>	<TIME>	<OPEN>	<HIGH>	<LOW>	<CLOSE>	<TICKVOL>	<VOL>	<SPREAD>
+    struct Candlestick {
+        std::chrono::milliseconds   m_time{};
+        std::chrono::year_month_day m_date{};
+        double m_open{ 0.0 };
+        double m_high{ 0.0 };
+        double m_low{ 0.0 };
+        double m_price{ 0.0 };
+        double m_close{ 0.0 };
+        double m_tick_volume{ 0.0 };
+        double m_volume{ 0.0 };
+        double m_spread{ 0.0 };
+
+        Candlestick() = default;
 
         Candlestick(std::chrono::milliseconds time,
             std::chrono::year_month_day date,
-            double open, double high, double low,double price ,double close,
+            double open, double high, double low, double price, double close,
             double tick_volume, double volume, double spread)
             : m_time{ time }
             , m_date{ date }
             , m_open{ open }
             , m_high{ high }
-            , m_price{ price }
             , m_low{ low }
+            , m_price{ price }
             , m_close{ close }
             , m_tick_volume{ tick_volume }
             , m_volume{ volume }
@@ -63,96 +66,110 @@ namespace map::market_data {
     };
 
     // <DATE>	<TIME>	<BID>	<ASK>	<LAST>	<VOLUME>	<FLAGS>
-    // TODO: This class I am planning on using to validate my tick class above. This is the actual tick class, that gets
-    //       market events each time they change. The above is the tick every minute,5 minutes, etc
     struct Tick {
-        std::chrono::milliseconds   m_time;
-        std::chrono::year_month_day m_date;
-        double m_bid; // times 100
-        double m_ask;
-        double m_last;
-        double m_volume;
-        size_t m_flags;
+        std::chrono::milliseconds   m_time{};
+        std::chrono::year_month_day m_date{};
+        double m_bid{ 0.0 };
+        double m_ask{ 0.0 };
+        double m_last{ 0.0 };
+        double m_volume{ 0.0 };
+        std::size_t m_flags{ 0 };
 
-        Tick() {
-            m_bid = 0;
-            m_ask = 0;
-            m_last = 0;
-            m_volume = 0;
-            m_flags = 0;
+        Tick() = default;
+
+        Tick(std::chrono::milliseconds time, std::chrono::year_month_day date,
+            double bid, double ask, double last, double volume, std::size_t flags)
+            : m_time{ time }
+            , m_date{ date }
+            , m_bid{ bid }
+            , m_ask{ ask }
+            , m_last{ last }
+            , m_volume{ volume }
+            , m_flags{ flags }
+        {}
+
+        [[nodiscard]] double mid() const noexcept {
+            return (m_bid + m_ask) * 0.5;
         }
 
-        Tick(std::chrono::milliseconds time, std::chrono::year_month_day date,double bid, double ask, double last,
-                double volume, size_t flags
-        ) :
-            m_time{time}, m_date{date}, m_bid{bid}, m_ask{ask}, m_last{last}, m_volume{volume} , m_flags{flags}
-        {}
+        // Prefer last trade; fall back to mid for OTC rows with empty LAST.
+        [[nodiscard]] double trade_price() const noexcept {
+            return m_last > 0.0 ? m_last : mid();
+        }
     };
 
-    
+    [[nodiscard]] inline std::string to_human_time(std::chrono::milliseconds ms) {
+        const auto secs = std::chrono::duration_cast<std::chrono::seconds>(ms);
+        const std::chrono::hh_mm_ss time{ secs };
+        const auto millis = ms - std::chrono::duration_cast<std::chrono::milliseconds>(secs);
+        return std::format("{:02}:{:02}:{:02}.{:03}",
+            time.hours().count(),
+            time.minutes().count(),
+            time.seconds().count(),
+            millis.count());
+    }
+
+    // Aggregates ticks into OHLC candles. CSV parsing lives in tick_csv.
+    // No background thread: historical files are processed in-process from
+    // tick timestamps. Live ingest / tools are later sprints (M4+).
     class CandleStickBuilder {
     public:
-        CandleStickBuilder();
-        [[nodisgard]] std::vector<map::market_data::Candlestick>& get_candlesticks();
-        ~CandleStickBuilder();
-        Tick build_tick(std::string& path); // temporary - bad design
+        CandleStickBuilder() = default;
+        ~CandleStickBuilder() = default;
+
+        CandleStickBuilder(const CandleStickBuilder&) = delete;
+        CandleStickBuilder& operator=(const CandleStickBuilder&) = delete;
+        CandleStickBuilder(CandleStickBuilder&&) noexcept = default;
+        CandleStickBuilder& operator=(CandleStickBuilder&&) noexcept = default;
+
+        // Parse with tick_csv, ingest in order, close any open candle.
+        // Returns the number of ticks that parsed successfully.
+        std::size_t load_from_csv(const std::filesystem::path& path);
+
+        void ingest(const Tick& tick);
+        void ingest(const std::vector<Tick>& ticks);
+
+        // Close the in-progress M1 (and roll it into higher TFs).
+        void flush();
+
+        void clear();
+
+        [[nodiscard]] const std::vector<Candlestick>& candles(Timeframe tf) const;
+        [[nodiscard]] std::optional<Candlestick> last_candle(Timeframe tf) const;
+
+        // Existing call site used M30. Kept so nothing silently changes.
+        [[nodiscard]] const std::vector<Candlestick>& get_candlesticks() const {
+            return candles(Timeframe::M30);
+        }
+
+        [[nodiscard]] const std::vector<Tick>& processed_ticks() const {
+            return processed_ticks_;
+        }
+
+        [[nodiscard]] std::size_t tick_count() const {
+            return processed_ticks_.size();
+        }
+
     private:
-        std::vector<std::jthread> threads_;
+        std::vector<Tick> processed_ticks_;
 
-        std::mutex access_control;
-        std::atomic<bool> running;
-        
-        std::queue<Tick> ticks_;
-        std::vector<Tick> processed_ticks;
+        std::vector<Candlestick> minute_candlesticks_;
+        std::vector<Candlestick> minute_5_candlesticks_;
+        std::vector<Candlestick> minute_15_candlesticks_;
+        std::vector<Candlestick> minute_30_candlesticks_;
+        std::vector<Candlestick> hour_candlesticks_;
+        std::vector<Candlestick> hour_4_candlesticks_;
 
-        std::vector<Candlestick> minute_candlesticks;
-        std::vector<Candlestick> minute_5_candlesticks;
-        std::vector<Candlestick> minute_15_candlesticks;
-        std::vector<Candlestick> minute_30_candlesticks;
-        std::vector<Candlestick> hour_candlesticks;
-        std::vector<Candlestick> hour_4_candlesticks;
+        std::optional<Candlestick> open_m1_;
+        std::chrono::sys_time<std::chrono::milliseconds> open_m1_bucket_{};
 
-        [[noreturn]]  void make_candlesticks(std::string path);
-        [[nodisgard]] std::optional<Candlestick> get_candlestick(Timeframe timeframe = Timeframe::TICK, std::vector<Timeframe> tfs = {});
-        void build_candlestick(Timeframe& tf);
-        void build_candlestick(Timeframe&& tf);
-
-        void build_m1();
-        void build_from_lower(const std::vector<Candlestick>& lower, std::vector<Candlestick>& higher, size_t count);
-
-        inline std::chrono::milliseconds make_time(int h, int m, int s, int ms) noexcept {
-            return std::chrono::milliseconds{ (static_cast<long long>((h) * 3600 + m * 60 + s) * 1000 + ms) };
-        }
-
-        inline std::chrono::year_month_day make_date(int y, int m, int d) noexcept {
-            using namespace std::chrono;
-            return year{ y } / month{ static_cast<unsigned>(m) } / day{ static_cast<unsigned>(d) };
-        }
-
-        std::string to_human_time(std::chrono::milliseconds ms) noexcept {
-
-            auto secs = duration_cast<std::chrono::seconds>(ms);
-            std::chrono::hh_mm_ss time{ secs };
-
-            auto millis = ms - duration_cast<std::chrono::milliseconds>(secs);
-
-            return std::format("{:02}:{:02}:{:02}.{:03}",
-                time.hours().count(),
-                time.minutes().count(),
-                time.seconds().count(),
-                millis.count());
-        }
-
+        void close_open_m1();
+        void roll_up(const Candlestick& m1);
+        void merge_into(std::vector<Candlestick>& dest,
+            const Candlestick& m1,
+            std::chrono::minutes period);
     };
-}
 
+}  // namespace map::market_data
 
-
-
-
-
-
-
-
-
-#endif // !CANDLESTICK_H
+#endif  // !CANDLESTICK_H

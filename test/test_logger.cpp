@@ -40,5 +40,5 @@ TEST(M1_Logger, RotatingFileSinkCreatesLogDirFile) {
     map::logging::Logger::get_instance().get()->flush();
     // Relative "logs/" is what ISSUES.md #2/#3 will replace with a config path.
     EXPECT_TRUE(std::filesystem::exists("logs/map_gtest.log") ||
-        std::filesystem::exists("logs"));
+                std::filesystem::exists("logs"));
 }

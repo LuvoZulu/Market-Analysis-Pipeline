@@ -1,5 +1,11 @@
 include(GoogleTest)
 
+# One test binary. GTest::gtest_main is the test entry point — do not put
+# tests, SKIP, or GTEST_SKIP in the app's src/main.cpp, and do not add a
+# second main.cpp for tests.
+#
+# M4/M5/M6/M7 production headers are optional. Keep these sources in the
+# target: __has_include + GTEST_SKIP reports SKIP until the tools exist.
 add_executable(map_tests
     test_candlestick.cpp
     test_tick_csv.cpp

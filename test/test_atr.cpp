@@ -8,16 +8,16 @@ using map::indicators::Atr;
 
 namespace {
 
-    std::vector<Candlestick> two_day_bars() {
-        const auto d0 = make_date(2026, 7, 26);
-        const auto d1 = make_date(2026, 7, 27);
-        return {
-            make_candle(d0, make_tod(22, 0, 0), 4090, 4092, 4088, 4091, 10, 0.4),
-            make_candle(d0, make_tod(22, 1, 0), 4091, 4095, 4090, 4094, 12, 0.4),
-            make_candle(d1, make_tod(22, 0, 0), 4094, 4096, 4091, 4092, 11, 0.4),
-            make_candle(d1, make_tod(22, 1, 0), 4092, 4093, 4087, 4088, 9, 0.4),
-        };
-    }
+std::vector<Candlestick> two_day_bars() {
+    const auto d0 = make_date(2026, 7, 26);
+    const auto d1 = make_date(2026, 7, 27);
+    return {
+        make_candle(d0, make_tod(22, 0, 0), 4090, 4092, 4088, 4091, 10, 0.4),
+        make_candle(d0, make_tod(22, 1, 0), 4091, 4095, 4090, 4094, 12, 0.4),
+        make_candle(d1, make_tod(22, 0, 0), 4094, 4096, 4091, 4092, 11, 0.4),
+        make_candle(d1, make_tod(22, 1, 0), 4092, 4093, 4087, 4088, 9, 0.4),
+    };
+}
 
 }  // namespace
 
@@ -27,7 +27,7 @@ TEST(M3_Atr, EmptyAndSingleBarAreZero) {
     auto day = make_date(2026, 7, 26);
     EXPECT_EQ(atr.get_average(empty, day), 0.0);
 
-    std::vector<Candlestick> one{ make_candle(day, make_tod(22, 0, 0), 1, 2, 0.5, 1.2, 1) };
+    std::vector<Candlestick> one{make_candle(day, make_tod(22, 0, 0), 1, 2, 0.5, 1.2, 1)};
     EXPECT_EQ(atr.get_average(one, day), 0.0);
 }
 
