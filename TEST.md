@@ -32,10 +32,10 @@ tests never construct that class.
 Use Conan `CMakeConfigDeps` + `cmake_layout`. From the repo root:
 
 ```bash
-conan install . --build=missing -s compiler.cppstd=23 -s build_type=Debug
-cmake --preset conan-debug -DBUILD_TESTING=ON
-cmake --build --preset conan-debug
-ctest --preset conan-debug --output-on-failure
+conan install . --build=missing -s build_type=Release
+cmake --preset conan-default -DBUILD_TESTING=ON
+cmake --build --preset conan-release --target map_tests
+ctest --preset conan-release --output-on-failure
 ```
 
 If presets are not generated:

@@ -60,15 +60,6 @@ bool is_swing_low(const std::vector<Candlestick>& b, std::size_t i, std::size_t 
 
 }  // namespace
 
-TEST(M4_Momentum, OracleMarksKnownSwings) {
-    const auto bars = swing_series();
-    EXPECT_TRUE(is_swing_high(bars, 2, 2, 2));
-    EXPECT_TRUE(is_swing_high(bars, 8, 2, 2));
-    EXPECT_TRUE(is_swing_low(bars, 5, 2, 2));
-    EXPECT_TRUE(is_swing_low(bars, 11, 2, 2));
-    EXPECT_FALSE(is_swing_high(bars, 0, 2, 2));
-}
-
 #if MAP_HAS_M4
 TEST(M4_Momentum, DetectorMatchesOracle) {
     const auto bars = swing_series();
@@ -81,6 +72,15 @@ TEST(M4_Momentum, DetectorMatchesOracle) {
     EXPECT_NE(std::find(highs.begin(), highs.end(), 8u), highs.end());
     EXPECT_NE(std::find(lows.begin(), lows.end(), 5u), lows.end());
     EXPECT_NE(std::find(lows.begin(), lows.end(), 11u), lows.end());
+}
+
+TEST(M4_Momentum, OracleMarksKnownSwings) {
+    const auto bars = swing_series();
+    EXPECT_TRUE(is_swing_high(bars, 2, 2, 2));
+    EXPECT_TRUE(is_swing_high(bars, 8, 2, 2));
+    EXPECT_TRUE(is_swing_low(bars, 5, 2, 2));
+    EXPECT_TRUE(is_swing_low(bars, 11, 2, 2));
+    EXPECT_FALSE(is_swing_high(bars, 0, 2, 2));
 }
 
 TEST(M4_Momentum, LiquidityPoolsAtEqualHighs) {

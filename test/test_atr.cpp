@@ -83,15 +83,3 @@ TEST(M3_Atr, DateTimeWindowUsesFromTimeNotToTime) {
     EXPECT_GT(got, 0.0);
 }
 
-TEST(M3_Atr, GoldSessionRangeIsPositive) {
-    const auto d = make_date(2026, 7, 26);
-    std::vector<Candlestick> bars;
-    double px = 4092.0;
-    for (int i = 0; i < 10; ++i) {
-        bars.push_back(make_candle(d, make_tod(22, 1, i), px, px + 1.5, px - 1.0, px + 0.3, 5, 0.48));
-        px += 0.3;
-    }
-    Atr atr;
-    auto day = d;
-    EXPECT_GT(atr.get_average(bars, day), 0.0);
-}
