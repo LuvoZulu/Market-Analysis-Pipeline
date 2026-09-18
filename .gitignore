@@ -23,5 +23,7 @@ vscode/
 out/
 build/
 bin/
+logs/
 
 *.exe
+cmake_test_discovery_8b03c66f98.json

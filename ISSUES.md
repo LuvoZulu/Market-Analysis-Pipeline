@@ -34,3 +34,32 @@ There is a possibility that I face issues with my current usage of chrono. I am 
 ```
 In calculating the average true range, in time horizons how do I calculate time accurately when its not provided? Document this thoroughly
 ```
+
+6. Testing issues
+```
+1. **`build_tick` drops empty CSV fields.**  
+   `views::filter(!empty)` collapses `LAST` and `VOLUME`, so FLAGS becomes field 4
+   and bid/ask are assigned swapped. `test_tick_csv.cpp` parses
+   `...\t4091.771\t4092.251\t\t\t6` and expects bid=4091.771, ask=4092.251, flags=6.
+
+2. **`Atr::get_average(data, target_date)` returns 0 on a same-day series.**  
+   The loop is `while (curr->m_date != target_date)`, so gold.csv (all 2026-07-26)
+   never contributes a TR. `M3_Atr.DateWindowIncludesTheTargetDay` requires the
+   target day to be **included**.
+
+3. **Fourth ATR overload uses `to_time` on the skip path**  
+   `m_time < to_time` instead of `from_time`, and it is ORed without the date.
+   `M3_Atr.DateTimeWindowUsesFromTimeNotToTime`.
+
+4. **Tick volume is `tick.m_volume` which `build_tick` never sets.**  
+   OTC volume is empty. M1 aggregation contract: `m_tick_volume = count of ticks`.
+   Keep `m_volume` as 0 until you have real volume.
+
+5. **Wall clock.**  
+   `make_candlesticks` waits on `system_clock::now()`. Bars must close on **tick
+   timestamps** (`m_date` + `m_time`). `M7_Pipeline.DoesNotUseWallClock`.
+
+6. **Constructor starts a live thread** with a hardcoded `..\\..\\data\\gold.csv`.  
+   Tests never construct `CandleStickBuilder`. Feed ticks in; don’t start IO in
+   the constructor.
+```

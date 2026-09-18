@@ -1,354 +1,206 @@
 #include "map/Candlestick.h"
+#include "map/tick_csv.h"
 
-#include <string> //std::string, std::getline
-#include <chrono> // std::chrono
-#include <fstream> // std::ifstream
-#include <filesystem> // std::filesystem::path
-#include <ranges> // std::ranges::split
-#include <string_view> // std::string_view
-#include <charconv>  //std::from_chars
-#include <vector> //std::vector
-#include <print>  //std::println
-#include <limits> //std::numerics
+#include "logging/Logging.h"
+
+#include <algorithm>
 
 namespace map::market_data {
-    CandleStickBuilder::CandleStickBuilder()
-    {
-        std::string path = "..\\..\\data\\gold.csv";
-        running = true;
+    namespace {
 
-        threads_.emplace_back([this, path = std::move(path)] {make_candlesticks(path); });
-    }
+        using Stamp = std::chrono::sys_time<std::chrono::milliseconds>;
 
-    std::vector<map::market_data::Candlestick>& CandleStickBuilder::get_candlesticks() {
-        return minute_30_candlesticks;
-    }
-
-    std::optional<Candlestick> CandleStickBuilder::get_candlestick(Timeframe timeframe,std::vector<Timeframe> tfs)
-    {
-        if (tfs.empty() && timeframe == Timeframe::TICK) {
-            //if (ticks_.empty())
-                return std::nullopt;
-            //return std::optional{ticks_.front()};
+        Stamp stamp_of(std::chrono::year_month_day date,
+            std::chrono::milliseconds tod) {
+            return std::chrono::sys_days{ date } + tod;
         }
 
-        switch (timeframe) {
-        case Timeframe::M1:
-            return minute_candlesticks.empty()
-                ? std::nullopt
-                : std::optional{ minute_candlesticks.back() };
+        Stamp stamp_of(const Tick& t) {
+            return stamp_of(t.m_date, t.m_time);
+        }
 
-        case Timeframe::M5:
-            return minute_5_candlesticks.empty()
-                ? std::nullopt
-                : std::optional{ minute_5_candlesticks.back() };
+        Stamp stamp_of(const Candlestick& c) {
+            return stamp_of(c.m_date, c.m_time);
+        }
 
-        case Timeframe::M15:
-            return minute_15_candlesticks.empty()
-                ? std::nullopt
-                : std::optional{ minute_15_candlesticks.back() };
+        Stamp floor_to(Stamp t, std::chrono::minutes period) {
+            if (period.count() <= 0) {
+                return t;
+            }
+            const auto mins = std::chrono::floor<std::chrono::minutes>(t);
+            const auto n = mins.time_since_epoch() / period;
+            return Stamp{ n * period };
+        }
 
-        case Timeframe::M30:
-            return minute_30_candlesticks.empty()
-                ? std::nullopt
-                : std::optional{ minute_30_candlesticks.back() };
+        // Contract (helpers.h / ISSUES.md #1):
+        //   price = last if present else mid(bid, ask)
+        //   m_tick_volume = tick count
+        //   m_time/m_date of an M1 = first tick in the minute (not wall clock, not floored)
+        Candlestick candle_from_tick(const Tick& tick) {
+            const double px = tick.trade_price();
+            return Candlestick{
+                tick.m_time,
+                tick.m_date,
+                px, px, px, px, px,
+                1.0,
+                1.0,
+                tick.m_ask - tick.m_bid
+            };
+        }
 
-        case Timeframe::H1:
-            return hour_candlesticks.empty()
-                ? std::nullopt
-                : std::optional{ hour_candlesticks.back() };
+        void apply_tick(Candlestick& c, const Tick& tick) {
+            const double px = tick.trade_price();
+            c.m_high = std::max(c.m_high, px);
+            c.m_low = std::min(c.m_low, px);
+            c.m_close = px;
+            c.m_price = px;
+            c.m_tick_volume += 1.0;
+            c.m_volume += 1.0;
+            c.m_spread = tick.m_ask - tick.m_bid;
+        }
 
-        case Timeframe::H4:
-            return hour_4_candlesticks.empty()
-                ? std::nullopt
-                : std::optional{ hour_4_candlesticks.back() };
+        void merge_candle(Candlestick& dest, const Candlestick& src) {
+            dest.m_high = std::max(dest.m_high, src.m_high);
+            dest.m_low = std::min(dest.m_low, src.m_low);
+            dest.m_close = src.m_close;
+            dest.m_price = src.m_close;
+            dest.m_tick_volume += src.m_tick_volume;
+            dest.m_volume += src.m_volume;
+            dest.m_spread = src.m_spread;
+        }
 
+    }  // namespace
+
+    std::size_t CandleStickBuilder::load_from_csv(const std::filesystem::path& path) {
+        std::vector<TickParseError> errors;
+        auto ticks = load_ticks_csv(path, &errors);
+
+        for (const auto& e : errors) {
+            LOG_WARN("tick parse L{} ({}): {}", e.line, e.why, e.raw);
+        }
+
+        if (ticks.empty() && !std::filesystem::exists(path)) {
+            LOG_ERROR("Could not open file: {}", path.string());
+            return 0;
+        }
+
+        ingest(ticks);
+        flush();
+        return ticks.size();
+    }
+
+    void CandleStickBuilder::ingest(const std::vector<Tick>& ticks) {
+        for (const auto& t : ticks) {
+            ingest(t);
+        }
+    }
+
+    void CandleStickBuilder::ingest(const Tick& tick) {
+        if (!tick.m_date.ok()) {
+            LOG_WARN("Skipping tick with invalid date");
+            return;
+        }
+
+        const Stamp ts = stamp_of(tick);
+        const Stamp bucket = floor_to(ts, std::chrono::minutes{ 1 });
+
+        if (open_m1_ && bucket < open_m1_bucket_) {
+            LOG_WARN("Skipping out-of-order tick at {}", to_human_time(tick.m_time));
+            return;
+        }
+        if (!open_m1_ && !minute_candlesticks_.empty()) {
+            const Stamp last_bucket =
+                floor_to(stamp_of(minute_candlesticks_.back()), std::chrono::minutes{ 1 });
+            if (bucket < last_bucket) {
+                LOG_WARN("Skipping out-of-order tick at {}", to_human_time(tick.m_time));
+                return;
+            }
+        }
+
+        if (open_m1_ && bucket != open_m1_bucket_) {
+            close_open_m1();
+        }
+
+        if (!open_m1_) {
+            open_m1_ = candle_from_tick(tick);
+            open_m1_bucket_ = bucket;
+        }
+        else {
+            apply_tick(*open_m1_, tick);
+        }
+
+        processed_ticks_.push_back(tick);
+    }
+
+    void CandleStickBuilder::flush() {
+        close_open_m1();
+    }
+
+    void CandleStickBuilder::clear() {
+        processed_ticks_.clear();
+        minute_candlesticks_.clear();
+        minute_5_candlesticks_.clear();
+        minute_15_candlesticks_.clear();
+        minute_30_candlesticks_.clear();
+        hour_candlesticks_.clear();
+        hour_4_candlesticks_.clear();
+        open_m1_.reset();
+        open_m1_bucket_ = {};
+    }
+
+    const std::vector<Candlestick>& CandleStickBuilder::candles(Timeframe tf) const {
+        switch (tf) {
+        case Timeframe::M1:  return minute_candlesticks_;
+        case Timeframe::M5:  return minute_5_candlesticks_;
+        case Timeframe::M15: return minute_15_candlesticks_;
+        case Timeframe::M30: return minute_30_candlesticks_;
+        case Timeframe::H1:  return hour_candlesticks_;
+        case Timeframe::H4:  return hour_4_candlesticks_;
         case Timeframe::TICK:
-        default:
-            //if (ticks_.empty())
-                return std::nullopt;
-            // return std::optional{ ticks_.front() }; // to add valid conversion from Candlestick to Tick and/or visa vers
+        default: {
+            static const std::vector<Candlestick> empty;
+            return empty;
+        }
         }
     }
 
-    Tick CandleStickBuilder::build_tick(std::string& path)
-    {
-
-        if (!running) {
-            for (auto& thr : threads_) {
-                thr.request_stop();
-            }
+    std::optional<Candlestick> CandleStickBuilder::last_candle(Timeframe tf) const {
+        const auto& v = candles(tf);
+        if (v.empty()) {
+            return std::nullopt;
         }
-
-
-        std::filesystem::path file_path = path;
-        std::ifstream ticks_file(file_path);
-        Tick tick{};
-
-        if (!ticks_file.is_open()) {
-            LOG_ERROR("Could not open file: {}", path);
-            return tick;
-        }
-
-        std::string tick_event;
-        while (std::getline(ticks_file, tick_event)) {
-            if (tick_event.empty()) continue;
-
-            auto split_str = tick_event
-                | std::views::split('\t')
-                | std::views::filter([](auto&& rng) { return !rng.empty(); })
-                | std::views::transform([](auto&& rng) {
-                return std::string(rng.begin(), rng.end());
-                    });
-
-            std::vector<std::string> fields(split_str.begin(), split_str.end());
-
-            if (fields.size() < 5) {
-                LOG_WARN("Skipping malformed line: {}", tick_event); // Log these to a file for further investigation
-                continue;
-            }
-
-            {
-                auto s_split = fields[0] | std::views::split('.')
-                    | std::views::transform([](auto&& r) {
-                    return std::string_view(r.begin(), r.end());
-                        });
-                std::vector<std::string_view> date_parts(s_split.begin(), s_split.end());
-
-                if (date_parts.size() == 3) {
-                    int y = 0, m = 0, d = 0;
-                    std::from_chars(date_parts[0].data(), date_parts[0].data() + date_parts[0].size(), y);
-                    std::from_chars(date_parts[1].data(), date_parts[1].data() + date_parts[1].size(), m);
-                    std::from_chars(date_parts[2].data(), date_parts[2].data() + date_parts[2].size(), d);
-                    tick.m_date = make_date(y, m, d);
-                }
-            }
-
-            {
-                auto s_split = fields[1] | std::views::split(':')
-                    | std::views::transform([](auto&& r) {
-                    return std::string_view(r.begin(), r.end());
-                        });
-                std::vector<std::string_view> time_parts(s_split.begin(), s_split.end());
-
-                if (time_parts.size() >= 3) {
-                    auto sec_ms = time_parts[2] | std::views::split('.')
-                        | std::views::transform([](auto&& r) {
-                        return std::string_view(r.begin(), r.end());
-                            });
-                    std::vector<std::string_view> ms_parts(sec_ms.begin(), sec_ms.end());
-
-                    int h = 0, min = 0, s = 0, ms = 0;
-                    std::from_chars(time_parts[0].data(), time_parts[0].data() + time_parts[0].size(), h);
-                    std::from_chars(time_parts[1].data(), time_parts[1].data() + time_parts[1].size(), min);
-
-                    if (ms_parts.size() >= 1)
-                        std::from_chars(ms_parts[0].data(), ms_parts[0].data() + ms_parts[0].size(), s);
-                    if (ms_parts.size() >= 2)
-                        std::from_chars(ms_parts[1].data(), ms_parts[1].data() + ms_parts[1].size(), ms);
-
-                    tick.m_time = make_time(h, min, s, ms);
-                }
-            }
-
-            double ask = 0.0, bid = 0.0, flags = 0.0;
-            std::from_chars(fields[2].data(), fields[2].data() + fields[2].size(), ask);
-            std::from_chars(fields[3].data(), fields[3].data() + fields[3].size(), bid);
-            std::from_chars(fields[4].data(), fields[4].data() + fields[4].size(), flags);
-
-            tick.m_ask = ask;
-            tick.m_bid = bid;
-            tick.m_flags = flags;
-
-            LOG_INFO("Tick: date={} time={} ask={}", tick.m_date, to_human_time(tick.m_time), tick.m_ask);
-        }
-
-        return tick;
+        return v.back();
     }
 
-    void CandleStickBuilder::make_candlesticks(std::string path) 
-    {
-        if (!running) {
-            for (auto& thr : threads_) {
-                thr.request_stop();
-            }
-        }
-
-        using namespace std::chrono;
-
-        auto next_minute = floor<minutes>(system_clock::now()) + minutes{ 1 };
-        int minute_counter = 0;
-
-        while (running.load(std::memory_order_relaxed)) {
-
-            while (system_clock::now() < next_minute && running.load(std::memory_order_relaxed)) {
-                auto tick = build_tick(path);
-
-                {
-                    std::lock_guard lock(access_control);
-                    ticks_.emplace(std::move(tick));
-                }
-
-                std::this_thread::sleep_for(milliseconds{ 5 });
-            }
-
-            if (!running.load(std::memory_order_relaxed)) {
-                for (auto& thr : threads_) {
-                    thr.request_stop();
-                }
-                break;
-            }
-                
-
-            ++minute_counter;
-
-            build_candlestick(Timeframe::M1);
-
-            if (minute_counter % 5 == 0)   build_candlestick(Timeframe::M5);
-            if (minute_counter % 15 == 0)  build_candlestick(Timeframe::M15);
-            if (minute_counter % 30 == 0)  build_candlestick(Timeframe::M30);
-            if (minute_counter % 60 == 0)  build_candlestick(Timeframe::H1);
-            if (minute_counter % 240 == 0) build_candlestick(Timeframe::H4);
-
-            next_minute += minutes{ 1 };
-        }
-
-        if (!running) {
-            for (auto& thr : threads_) {
-                LOG_INFO("STOPPING ALL THREADS\n");
-                thr.request_stop();
-            }
-        }
-
-        if (ticks_.empty()) {
-            LOG_INFO("STOPPING CANDLESTICK THREAD\n");
-            for (auto& thr : threads_) {
-                thr.request_stop();
-            }
-            running.store(false, std::memory_order_relaxed);
-        }
-    }
-
-    void CandleStickBuilder::build_candlestick(Timeframe& tf)
-    {
-            switch (tf) {
-            case Timeframe::M1:
-                build_m1();
-                break;
-            case Timeframe::M5:
-                build_from_lower(minute_candlesticks, minute_5_candlesticks, 5);
-                break;
-            case Timeframe::M15:
-                build_from_lower(minute_5_candlesticks, minute_15_candlesticks, 3);
-                break;
-            case Timeframe::M30:
-                build_from_lower(minute_15_candlesticks, minute_30_candlesticks, 2);
-                break;
-            case Timeframe::H1:
-                build_from_lower(minute_30_candlesticks, hour_candlesticks, 2);
-                break;
-            case Timeframe::H4:
-                build_from_lower(hour_candlesticks, hour_4_candlesticks, 4);
-                break;
-            default:
-                break;
-            }
-    }
-
-    void CandleStickBuilder::build_candlestick(Timeframe&& tf)
-    {
-        Timeframe current_view = std::move(tf);
-
-        switch (current_view) {
-            case Timeframe::M1:
-                build_m1();
-                break;
-            case Timeframe::M5:
-                build_from_lower(minute_candlesticks, minute_5_candlesticks, 5);
-                break;
-            case Timeframe::M15:
-                build_from_lower(minute_5_candlesticks, minute_15_candlesticks, 3);
-                break;
-            case Timeframe::M30:
-                build_from_lower(minute_15_candlesticks, minute_30_candlesticks, 2);
-                break;
-            case Timeframe::H1:
-                build_from_lower(minute_30_candlesticks, hour_candlesticks, 2);
-                break;
-            case Timeframe::H4:
-                build_from_lower(hour_candlesticks, hour_4_candlesticks, 4);
-                break;
-            default:
-                break;
-        }
-    }
-
-    void CandleStickBuilder::build_m1()
-    {
-        if (ticks_.empty())
+    void CandleStickBuilder::close_open_m1() {
+        if (!open_m1_) {
             return;
-
-        double high = -std::numeric_limits<double>::infinity();
-        double low = std::numeric_limits<double>::infinity();
-        double volume = 0.0;
-
-        Tick open_tick = ticks_.front();
-        double open_price = (open_tick.m_bid + open_tick.m_ask) * 0.5;
-
-        Tick last_tick = open_tick;
-
-        while (!ticks_.empty()) {
-            Tick tick = ticks_.front();
-            ticks_.pop();
-
-            double price = (tick.m_bid + tick.m_ask) * 0.5;
-
-            high = std::max(high, price);
-            low = std::min(low, price);
-            volume += tick.m_volume;
-
-            last_tick = tick;
-
-            
-            processed_ticks.emplace_back(tick);
         }
-
-        double close_price = (last_tick.m_bid + last_tick.m_ask) * 0.5;
-        double spread = last_tick.m_ask - last_tick.m_bid;
-
-        minute_candlesticks.emplace_back(map::market_data::Candlestick(open_tick.m_time,open_tick.m_date,open_price,high,low,close_price,close_price,volume,volume,spread));
+        minute_candlesticks_.push_back(*open_m1_);
+        roll_up(*open_m1_);
+        open_m1_.reset();
     }
 
-    void CandleStickBuilder::build_from_lower(const std::vector<Candlestick>& lower,std::vector<Candlestick>& higher,size_t count)
+    void CandleStickBuilder::roll_up(const Candlestick& m1) {
+        merge_into(minute_5_candlesticks_, m1, std::chrono::minutes{ 5 });
+        merge_into(minute_15_candlesticks_, m1, std::chrono::minutes{ 15 });
+        merge_into(minute_30_candlesticks_, m1, std::chrono::minutes{ 30 });
+        merge_into(hour_candlesticks_, m1, std::chrono::minutes{ 60 });
+        merge_into(hour_4_candlesticks_, m1, std::chrono::minutes{ 240 });
+    }
+
+    void CandleStickBuilder::merge_into(std::vector<Candlestick>& dest,
+        const Candlestick& m1,
+        std::chrono::minutes period) 
     {
-        if (lower.size() < count)
+        const Stamp bucket = floor_to(stamp_of(m1), period);
+
+        if (dest.empty() || floor_to(stamp_of(dest.back()), period) != bucket) {
+            dest.push_back(m1);
             return;
-        size_t start = lower.size() - count;
-
-        const Candlestick& open_stick = lower[start];
-        const Candlestick& close_stick = lower.back();
-
-        double high = -std::numeric_limits<double>::infinity();
-        double low = std::numeric_limits<double>::infinity();
-        double volume = 0.0;
-
-        for (size_t i = start; i < lower.size(); ++i) {
-            high = std::max(high, lower[i].m_high);
-            low = std::min(low, lower[i].m_low);
-            volume += lower[i].m_volume;
         }
 
-        double spread = close_stick.m_spread;
-
-        higher.emplace_back(open_stick.m_time,open_stick.m_date,open_stick.m_price,high,low,close_stick.m_close, close_stick.m_close,volume,volume,spread);
+        merge_candle(dest.back(), m1);
     }
 
-    CandleStickBuilder::~CandleStickBuilder() {
-        running.store(false, std::memory_order_relaxed);
-
-        for (auto& t : threads_) t.request_stop();
-
-        threads_.clear();
-    }
-    
-}
+}  // namespace map::market_data
