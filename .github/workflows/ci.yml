@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CMAKE_BUILD_TYPE: Debug
+  CMAKE_BUILD_PARALLEL_LEVEL: 4
+
+jobs:
+  test:
+    name: Ubuntu / C++23 / GTest
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake ninja-build g++ \
+            libgtest-dev libgmock-dev
+
+      - name: Configure
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ env.CMAKE_BUILD_TYPE }}
+          -DCMAKE_CXX_STANDARD=23
+          -DCMAKE_CXX_STANDARD_REQUIRED=ON
+          -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure --timeout 60
