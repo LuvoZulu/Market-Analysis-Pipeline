@@ -1,5 +1,6 @@
 #include <map/Candlestick.h>
 #include <map/tick_csv.h>
+#include <logging/Logging.h>
 
 #include <iostream>
 #include <filesystem>
